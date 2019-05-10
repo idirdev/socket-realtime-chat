@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socket Realtime Chat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; height: 100vh; display: flex; flex-direction: column; }
+    #login { display: flex; justify-content: center; align-items: center; height: 100vh; }
+    #login form { background: #16213e; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+    #login h2 { margin-bottom: 1rem; color: #e94560; }
+    #login input { display: block; width: 280px; padding: 0.6rem; margin-bottom: 1rem; border: 1px solid #333; border-radius: 4px; background: #0f3460; color: #eee; font-size: 1rem; }
+    #login button { width: 100%; padding: 0.6rem; background: #e94560; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+    #login button:hover { background: #c73e54; }
+    #chat { display: none; flex: 1; flex-direction: column; height: 100vh; }
+    #header { background: #16213e; padding: 0.8rem 1.2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+    #header h3 { color: #e94560; }
+    #header span { font-size: 0.85rem; color: #888; }
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #sidebar { width: 220px; background: #16213e; border-right: 1px solid #333; overflow-y: auto; padding: 0.5rem; }
+    #sidebar h4 { color: #aaa; padding: 0.5rem; font-size: 0.8rem; text-transform: uppercase; }
+    .room-item { padding: 0.5rem 0.8rem; cursor: pointer; border-radius: 4px; margin-bottom: 2px; font-size: 0.9rem; }
+    .room-item:hover { background: #0f3460; }
+    .room-item.active { background: #e94560; }
+    #messages-area { flex: 1; display: flex; flex-direction: column; }
+    #messages { flex: 1; overflow-y: auto; padding: 1rem; }
+    .message { margin-bottom: 0.8rem; }
+    .message .meta { font-size: 0.75rem; color: #888; margin-bottom: 2px; }
+    .message .meta .author { font-weight: bold; }
+    .message .content { background: #16213e; padding: 0.5rem 0.8rem; border-radius: 6px; display: inline-block; max-width: 80%; word-wrap: break-word; }
+    .message.system .content { background: none; color: #666; font-style: italic; font-size: 0.85rem; }
+    #typing-indicator { padding: 0 1rem 0.3rem; font-size: 0.8rem; color: #888; height: 1.2rem; }
+    #input-area { display: flex; padding: 0.8rem; background: #16213e; border-top: 1px solid #333; }
+    #input-area input { flex: 1; padding: 0.6rem; background: #0f3460; border: 1px solid #333; border-radius: 4px; color: #eee; font-size: 1rem; }
+    #input-area button { padding: 0.6rem 1.2rem; margin-left: 0.5rem; background: #e94560; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <form id="login-form">
+      <h2>Join Chat</h2>
+      <input type="text" id="username-input" placeholder="Enter your username..." maxlength="30" required>
+      <button type="submit">Connect</button>
+    </form>
+  </div>
+
+  <div id="chat">
+    <div id="header">
+      <h3 id="room-name">General</h3>
+      <span id="online-count">0 online</span>
+    </div>
+    <div id="main">
+      <div id="sidebar">
+        <h4>Rooms</h4>
+        <div id="room-list"></div>
+      </div>
+      <div id="messages-area">
+        <div id="messages"></div>
+        <div id="typing-indicator"></div>
+        <div id="input-area">
+          <input type="text" id="message-input" placeholder="Type a message..." maxlength="2000">
+          <button id="send-btn">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    (function() {
+      var socket, currentUser, currentRoomId;
+      var typingTimeout;
+      var typingUsers = {};
+
+      var loginForm = document.getElementById('login-form');
+      var loginDiv = document.getElementById('login');
+      var chatDiv = document.getElementById('chat');
+      var messagesDiv = document.getElementById('messages');
+      var messageInput = document.getElementById('message-input');
+      var sendBtn = document.getElementById('send-btn');
+      var roomList = document.getElementById('room-list');
+      var roomNameEl = document.getElementById('room-name');
+      var typingEl = document.getElementById('typing-indicator');
+
+      loginForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var username = document.getElementById('username-input').value.trim();
+        if (!username) return;
+
+        socket = io('/chat', { query: { username: username } });
+
+        socket.on('registered', function(data) {
+          currentUser = data.user;
+          loginDiv.style.display = 'none';
+          chatDiv.style.display = 'flex';
+          socket.emit('list_rooms');
+        });
+
+        socket.on('rooms_list', function(data) {
+          roomList.innerHTML = '';
+          data.rooms.forEach(function(room) {
+            var div = document.createElement('div');
+            div.className = 'room-item' + (room.id === currentRoomId ? ' active' : '');
+            div.textContent = '# ' + room.name + ' (' + room.memberCount + ')';
+            div.addEventListener('click', function() { joinRoom(room.id, room.name); });
+            roomList.appendChild(div);
+          });
+          if (!currentRoomId && data.rooms.length > 0) {
+            joinRoom(data.rooms[0].id, data.rooms[0].name);
+          }
+        });
+
+        socket.on('room_joined', function(data) {
+          currentRoomId = data.roomId;
+          roomNameEl.textContent = data.roomName;
+          messagesDiv.innerHTML = '';
+          socket.emit('message_history', { limit: 50, offset: 0 });
+          socket.emit('list_rooms');
+        });
+
+        socket.on('new_message', function(msg) {
+          appendMessage(msg.authorName, msg.content, msg.timestamp, msg.authorId === currentUser.id);
+        });
+
+        socket.on('message_history_result', function(data) {
+          messagesDiv.innerHTML = '';
+          data.messages.reverse().forEach(function(msg) {
+            if (!msg.isDeleted) {
+              appendMessage(msg.authorName, msg.content, msg.timestamp, msg.authorId === currentUser.id);
+            }
+          });
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        socket.on('user_joined', function(data) {
+          appendSystemMessage(data.username + ' joined the room');
+          socket.emit('list_rooms');
+        });
+
+        socket.on('user_left', function(data) {
+          appendSystemMessage(data.username + ' left the room');
+          socket.emit('list_rooms');
+        });
+
+        socket.on('user_typing', function(data) {
+          if (data.isTyping) {
+            typingUsers[data.userId] = data.username;
+          } else {
+            delete typingUsers[data.userId];
+          }
+          updateTypingIndicator();
+        });
+
+        socket.on('error', function(data) {
+          console.error('Server error:', data.message);
+        });
+      });
+
+      function joinRoom(roomId, roomName) {
+        socket.emit('join_room', { roomId: roomId });
+      }
+
+      function appendMessage(author, content, timestamp, isOwn) {
+        var div = document.createElement('div');
+        div.className = 'message';
+        var time = new Date(timestamp).toLocaleTimeString();
+        div.innerHTML = '<div class="meta"><span class="author" style="color:' + (isOwn ? '#e94560' : '#3498db') + '">' + author + '</span> <span>' + time + '</span></div><div class="content">' + content + '</div>';
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      function appendSystemMessage(text) {
+        var div = document.createElement('div');
+        div.className = 'message system';
+        div.innerHTML = '<div class="content">' + text + '</div>';
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      function updateTypingIndicator() {
+        var names = Object.values(typingUsers);
+        if (names.length === 0) { typingEl.textContent = ''; }
+        else if (names.length === 1) { typingEl.textContent = names[0] + ' is typing...'; }
+        else if (names.length === 2) { typingEl.textContent = names[0] + ' and ' + names[1] + ' are typing...'; }
+        else { typingEl.textContent = names.length + ' people are typing...'; }
+      }
+
+      function sendMessage() {
+        var content = messageInput.value.trim();
+        if (!content || !currentRoomId) return;
+        socket.emit('send_message', { content: content });
+        messageInput.value = '';
+        socket.emit('typing_stop');
+      }
+
+      sendBtn.addEventListener('click', sendMessage);
+      messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { sendMessage(); return; }
+        socket.emit('typing_start');
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(function() { socket.emit('typing_stop'); }, 2000);
+      });
+    })();
+  </script>
+</body>
+</html>
