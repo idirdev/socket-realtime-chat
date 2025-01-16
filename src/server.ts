@@ -17,7 +17,9 @@ const app = express();
 const server = http.createServer(app);
 
 const io = socketIo(server, {
-  origins: CORS_ORIGIN,
+  cors: {
+    origin: CORS_ORIGIN,
+  },
   pingTimeout: 60000,
   pingInterval: 25000,
 });

@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsc -w & nodemon dist/server.js",
-    "lint": "tslint -p tsconfig.json"
+    "lint": "tslint -p tsconfig.json",
+    "test": "vitest run"
   },
   "keywords": [
     "chat",
@@ -32,6 +33,7 @@
     "@types/uuid": "^3.4.6",
     "nodemon": "^1.19.4",
     "tslint": "^5.20.1",
-    "typescript": "^3.7.2"
+    "typescript": "^3.7.2",
+    "vitest": "^2.0.0"
   }
 }
