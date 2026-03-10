@@ -1,3 +1,5 @@
+> **Archived** — Kept for reference. Not part of the current portfolio. See [collab-engine](https://github.com/idirdev/collab-engine) instead.
+
 # Socket Realtime Chat
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3.7-blue.svg)](https://www.typescriptlang.org/)
