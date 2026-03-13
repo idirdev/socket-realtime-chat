@@ -142,3 +142,22 @@ The socket middleware enforces:
 ## License
 
 MIT
+
+---
+
+## 🇫🇷 Documentation en français
+
+### Description
+**Socket Realtime Chat** est une application de messagerie en temps réel construite avec TypeScript et Socket.IO. Elle supporte les salons de discussion, l'affichage des utilisateurs connectés et la diffusion instantanée des messages grâce aux WebSockets.
+
+### Installation
+```bash
+npm install
+npm run build
+```
+
+### Utilisation
+```bash
+npm start
+# Ouvrez http://localhost:3000 dans votre navigateur
+```
